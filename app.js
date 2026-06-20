@@ -1,3 +1,123 @@
+// ============================================================
+// LifeOS — Editorial Personal Planner
+// Vanilla JS. No build step. No framework.
+// ============================================================
+
+// ========== Theme Engine ==========
+const ThemeEngine = {
+  currentTheme: 'parchment',
+
+  init() {
+    const saved = localStorage.getItem('lifeos-theme');
+    if (saved) {
+      this.setTheme(saved, false);
+    } else {
+      this.setTheme('parchment', false);
+    }
+    this.setupListeners();
+    this.applySeasonalAmbient();
+  },
+
+  setTheme(theme, persist = true) {
+    this.currentTheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.theme === theme);
+    });
+    if (persist) {
+      localStorage.setItem('lifeos-theme', theme);
+    }
+    this.applySeasonalAmbient();
+  },
+
+  setupListeners() {
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.setTheme(btn.dataset.theme);
+      });
+    });
+  },
+
+  applySeasonalAmbient() {
+    const month = new Date().getMonth(); // 0-11
+    const blobs = document.querySelectorAll('.ambient-blob');
+    if (blobs.length < 3) return;
+
+    // Subtle seasonal color shifts for the ambient blobs
+    const seasonalColors = {
+      spring: ['#7BA38F', '#D4A574', '#C97B5C'],  // Mar-May
+      summer: ['#4C6B52', '#D9A441', '#7BA38F'],   // Jun-Aug
+      autumn: ['#C97B5C', '#D9A441', '#8B6F47'],   // Sep-Nov
+      winter: ['#5A6E78', '#7A7568', '#4C6B52']    // Dec-Feb
+    };
+
+    let colors;
+    if (month >= 2 && month <= 4) colors = seasonalColors.spring;
+    else if (month >= 5 && month <= 7) colors = seasonalColors.summer;
+    else if (month >= 8 && month <= 10) colors = seasonalColors.autumn;
+    else colors = seasonalColors.winter;
+
+    // Only override if using parchment theme (keep others pure)
+    if (this.currentTheme === 'parchment') {
+      blobs[0].style.background = colors[0];
+      blobs[1].style.background = colors[1];
+      blobs[2].style.background = colors[2];
+    } else {
+      // Reset to CSS defaults
+      blobs[0].style.background = '';
+      blobs[1].style.background = '';
+      blobs[2].style.background = '';
+    }
+  }
+};
+
+// ========== Custom Confirm Dialog ==========
+const ConfirmDialog = {
+  resolve: null,
+
+  init() {
+    document.getElementById('confirmYes').addEventListener('click', () => {
+      this.resolve(true);
+      this.close();
+    });
+    document.getElementById('confirmNo').addEventListener('click', () => {
+      this.resolve(false);
+      this.close();
+    });
+    // Close on backdrop click
+    document.getElementById('confirmDialog').addEventListener('click', (e) => {
+      if (e.target.id === 'confirmDialog') {
+        this.resolve(false);
+        this.close();
+      }
+    });
+    // Close on Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.isOpen()) {
+        this.resolve(false);
+        this.close();
+      }
+    });
+  },
+
+  isOpen() {
+    return document.getElementById('confirmDialog').classList.contains('active');
+  },
+
+  open(title, message) {
+    return new Promise(resolve => {
+      this.resolve = resolve;
+      document.getElementById('confirmTitle').textContent = title;
+      document.getElementById('confirmMessage').textContent = message;
+      document.getElementById('confirmDialog').classList.add('active');
+    });
+  },
+
+  close() {
+    document.getElementById('confirmDialog').classList.remove('active');
+  }
+};
+
 // ========== Data Structure ==========
 const DataStore = {
   schedule: {},
@@ -20,7 +140,11 @@ const DataStore = {
   init() {
     const stored = localStorage.getItem('lifeos-data');
     if (stored) {
-      Object.assign(this, JSON.parse(stored));
+      try {
+        Object.assign(this, JSON.parse(stored));
+      } catch (e) {
+        console.warn('Corrupted data reset');
+      }
     }
     this.ensureTodaysData();
   },
@@ -28,13 +152,8 @@ const DataStore = {
   ensureTodaysData() {
     const today = this.getTodayKey();
 
-    if (!this.schedule[today]) {
-      this.schedule[today] = [];
-    }
-
-    if (!this.dayIntervals[today]) {
-      this.dayIntervals[today] = [];
-    }
+    if (!this.schedule[today]) this.schedule[today] = [];
+    if (!this.dayIntervals[today]) this.dayIntervals[today] = [];
 
     if (!this.calorieExpenditure[today]) {
       this.calorieExpenditure[today] = {
@@ -44,25 +163,12 @@ const DataStore = {
     }
 
     if (!this.foodPlan[today]) {
-      this.foodPlan[today] = {
-        breakfast: [],
-        lunch: [],
-        dinner: [],
-        snacks: []
-      };
+      this.foodPlan[today] = { breakfast: [], lunch: [], dinner: [], snacks: [] };
     }
 
-    // Regenerate habits/meds as open items for today
-    this.habits.forEach(habit => {
-      if (!this.habitHistory[habit.id]) {
-        this.habitHistory[habit.id] = {};
-      }
-    });
-
-    this.meds.forEach(med => {
-      if (!this.habitHistory[med.id]) {
-        this.habitHistory[med.id] = {};
-      }
+    // Ensure habit history entries exist
+    [...this.habits, ...this.meds].forEach(item => {
+      if (!this.habitHistory[item.id]) this.habitHistory[item.id] = {};
     });
 
     this.save();
@@ -87,14 +193,10 @@ const DataStore = {
     }));
   },
 
+  // --- Schedule ---
   addScheduleItem(title, time) {
     const today = this.getTodayKey();
-    const item = {
-      id: Date.now(),
-      title,
-      time,
-      createdAt: new Date().toISOString()
-    };
+    const item = { id: Date.now(), title, time, createdAt: new Date().toISOString() };
     this.schedule[today].push(item);
     this.save();
     return item;
@@ -103,11 +205,7 @@ const DataStore = {
   updateScheduleItem(id, title, time) {
     const today = this.getTodayKey();
     const item = this.schedule[today].find(i => i.id === id);
-    if (item) {
-      item.title = title;
-      item.time = time;
-      this.save();
-    }
+    if (item) { item.title = title; item.time = time; this.save(); }
   },
 
   deleteScheduleItem(id) {
@@ -116,32 +214,18 @@ const DataStore = {
     this.save();
   },
 
+  // --- Habits ---
   addHabit(name, frequency = 'daily') {
-    const habit = {
-      id: Date.now(),
-      name,
-      frequency,
-      type: 'habit',
-      createdAt: new Date().toISOString()
-    };
+    const habit = { id: Date.now(), name, frequency, type: 'habit', createdAt: new Date().toISOString() };
     this.habits.push(habit);
     this.habitHistory[habit.id] = {};
     this.save();
     return habit;
   },
 
-  addMed(name, time) {
-    const med = {
-      id: Date.now(),
-      name,
-      time,
-      type: 'med',
-      createdAt: new Date().toISOString()
-    };
-    this.meds.push(med);
-    this.habitHistory[med.id] = {};
-    this.save();
-    return med;
+  updateHabit(id, name) {
+    const habit = this.habits.find(h => h.id === id);
+    if (habit) { habit.name = name; this.save(); }
   },
 
   deleteHabit(id) {
@@ -150,17 +234,30 @@ const DataStore = {
     this.save();
   },
 
+  // --- Meds ---
+  addMed(name, time) {
+    const med = { id: Date.now(), name, time, type: 'med', createdAt: new Date().toISOString() };
+    this.meds.push(med);
+    this.habitHistory[med.id] = {};
+    this.save();
+    return med;
+  },
+
+  updateMed(id, name, time) {
+    const med = this.meds.find(m => m.id === id);
+    if (med) { med.name = name; med.time = time; this.save(); }
+  },
+
   deleteMed(id) {
     this.meds = this.meds.filter(m => m.id !== id);
     delete this.habitHistory[id];
     this.save();
   },
 
+  // --- Habit/Med Toggling ---
   toggleHabit(id) {
     const today = this.getTodayKey();
-    if (!this.habitHistory[id]) {
-      this.habitHistory[id] = {};
-    }
+    if (!this.habitHistory[id]) this.habitHistory[id] = {};
     if (this.habitHistory[id][today]) {
       delete this.habitHistory[id][today];
     } else {
@@ -177,15 +274,10 @@ const DataStore = {
   getHabitStreak(id) {
     let streak = 0;
     let date = new Date();
-
     while (true) {
       const key = date.toISOString().split('T')[0];
-      if (this.habitHistory[id]?.[key]) {
-        streak++;
-        date.setDate(date.getDate() - 1);
-      } else {
-        break;
-      }
+      if (this.habitHistory[id]?.[key]) { streak++; date.setDate(date.getDate() - 1); }
+      else break;
     }
     return streak;
   },
@@ -193,24 +285,19 @@ const DataStore = {
   getHabitHistory(id, days = 30) {
     const history = [];
     const date = new Date();
-
     for (let i = days - 1; i >= 0; i--) {
-      const checkDate = new Date(date);
-      checkDate.setDate(checkDate.getDate() - i);
-      const key = checkDate.toISOString().split('T')[0];
-      const done = !!this.habitHistory[id]?.[key];
-      history.push({ date: key, done });
+      const d = new Date(date);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      history.push({ date: key, done: !!this.habitHistory[id]?.[key] });
     }
     return history;
   },
 
+  // --- Food Plan ---
   addMealItem(mealType, text) {
     const today = this.getTodayKey();
-    const item = {
-      id: Date.now(),
-      text,
-      done: false
-    };
+    const item = { id: Date.now(), text, done: false };
     this.foodPlan[today][mealType].push(item);
     this.save();
     return item;
@@ -219,10 +306,7 @@ const DataStore = {
   toggleMealItem(mealType, id) {
     const today = this.getTodayKey();
     const item = this.foodPlan[today][mealType].find(i => i.id === id);
-    if (item) {
-      item.done = !item.done;
-      this.save();
-    }
+    if (item) { item.done = !item.done; this.save(); }
   },
 
   deleteMealItem(mealType, id) {
@@ -231,14 +315,9 @@ const DataStore = {
     this.save();
   },
 
+  // --- Events ---
   addEvent(title, date, time = '') {
-    const event = {
-      id: Date.now(),
-      title,
-      date,
-      time,
-      createdAt: new Date().toISOString()
-    };
+    const event = { id: Date.now(), title, date, time, createdAt: new Date().toISOString() };
     this.events.push(event);
     this.save();
     return event;
@@ -246,12 +325,7 @@ const DataStore = {
 
   updateEvent(id, title, date, time) {
     const event = this.events.find(e => e.id === id);
-    if (event) {
-      event.title = title;
-      event.date = date;
-      event.time = time;
-      this.save();
-    }
+    if (event) { event.title = title; event.date = date; event.time = time; this.save(); }
   },
 
   deleteEvent(id) {
@@ -264,32 +338,113 @@ const DataStore = {
     today.setHours(0, 0, 0, 0);
     const futureDate = new Date(today);
     futureDate.setDate(futureDate.getDate() + daysAhead);
-
     return this.events
       .filter(e => {
-        const eventDate = new Date(e.date);
-        eventDate.setHours(0, 0, 0, 0);
-        return eventDate >= today && eventDate <= futureDate;
+        const ed = new Date(e.date); ed.setHours(0, 0, 0, 0);
+        return ed >= today && ed <= futureDate;
       })
       .sort((a, b) => {
-        const dateCompare = new Date(a.date) - new Date(b.date);
-        if (dateCompare !== 0) return dateCompare;
-        return (a.time || '').localeCompare(b.time || '');
+        const dc = new Date(a.date) - new Date(b.date);
+        return dc !== 0 ? dc : (a.time || '').localeCompare(b.time || '');
       });
   },
 
+  // --- Micro-Scheduling ---
+  addDayInterval(date, start, end, label) {
+    if (!this.dayIntervals[date]) this.dayIntervals[date] = [];
+    const interval = { id: Date.now(), start, end, label };
+    this.dayIntervals[date].push(interval);
+    this.save();
+    return interval;
+  },
+
+  updateDayInterval(date, id, start, end, label) {
+    if (!this.dayIntervals[date]) return;
+    const interval = this.dayIntervals[date].find(i => i.id === id);
+    if (interval) { interval.start = start; interval.end = end; interval.label = label; this.save(); }
+  },
+
+  deleteDayInterval(date, id) {
+    if (!this.dayIntervals[date]) return;
+    this.dayIntervals[date] = this.dayIntervals[date].filter(i => i.id !== id);
+    this.save();
+  },
+
+  getDayIntervals(date) {
+    return this.dayIntervals[date] || [];
+  },
+
+  // --- Calorie Tracking ---
+  setCalorieConfig(bmr, activityMultiplier) {
+    this.calorieConfig = { bmr, activityMultiplier };
+    this.ensureTodaysData();
+    this.save();
+  },
+
+  getCalorieStatus(date) {
+    if (!this.calorieExpenditure[date]) return { target: 0, consumed: 0, remaining: 0, percentage: 0 };
+    const exp = this.calorieExpenditure[date];
+    const consumed = exp.actualConsumed || 0;
+    const target = exp.targetExpenditure || 0;
+    return {
+      target, consumed,
+      remaining: target - consumed,
+      percentage: target > 0 ? Math.round((consumed / target) * 100) : 0
+    };
+  },
+
+  // --- Life Page: Principles ---
+  addPrinciple(text) {
+    const principle = { id: Date.now(), text };
+    this.lifePage.principles.push(principle);
+    this.save();
+    return principle;
+  },
+
+  updatePrinciple(id, text) {
+    const p = this.lifePage.principles.find(p => p.id === id);
+    if (p) { p.text = text; this.save(); }
+  },
+
+  deletePrinciple(id) {
+    this.lifePage.principles = this.lifePage.principles.filter(p => p.id !== id);
+    this.save();
+  },
+
+  // --- Life Page: Pillars ---
+  addLifePillar(name) {
+    const pillar = { id: Date.now(), name, status: 'stable' };
+    this.lifePage.pillars.push(pillar);
+    this.save();
+    return pillar;
+  },
+
+  updatePillarStatus(id, status) {
+    const pillar = this.lifePage.pillars.find(p => p.id === id);
+    if (pillar) { pillar.status = status; this.save(); }
+  },
+
+  deleteLifePillar(id) {
+    this.lifePage.pillars = this.lifePage.pillars.filter(p => p.id !== id);
+    this.save();
+  },
+
+  // --- Calendar Helpers ---
+  getCalendarIndicators(date) {
+    const eventCount = this.events.filter(e => e.date === date).length;
+    const habitDone = this.habits.some(h => this.habitHistory[h.id]?.[date]);
+    const medDone = this.meds.some(m => this.habitHistory[m.id]?.[date]);
+    const mealsLogged = Object.values(this.foodPlan[date] || {}).flat().some(m => m.done);
+    return { eventCount, habitDone, medDone, mealsLogged };
+  },
+
+  // --- Export / Import ---
   exportData() {
     return {
-      schedule: this.schedule,
-      habits: this.habits,
-      meds: this.meds,
-      foodPlan: this.foodPlan,
-      events: this.events,
-      habitHistory: this.habitHistory,
-      dayIntervals: this.dayIntervals,
-      calorieExpenditure: this.calorieExpenditure,
-      lifePage: this.lifePage,
-      calorieConfig: this.calorieConfig,
+      schedule: this.schedule, habits: this.habits, meds: this.meds,
+      foodPlan: this.foodPlan, events: this.events, habitHistory: this.habitHistory,
+      dayIntervals: this.dayIntervals, calorieExpenditure: this.calorieExpenditure,
+      lifePage: this.lifePage, calorieConfig: this.calorieConfig,
       exportedAt: new Date().toISOString()
     };
   },
@@ -306,163 +461,24 @@ const DataStore = {
     if (data.lifePage) this.lifePage = data.lifePage;
     if (data.calorieConfig) this.calorieConfig = data.calorieConfig;
     this.save();
-  },
-
-  // ========== Micro-Scheduling ==========
-  addDayInterval(date, start, end, label) {
-    if (!this.dayIntervals[date]) {
-      this.dayIntervals[date] = [];
-    }
-    const interval = {
-      id: Date.now(),
-      start,
-      end,
-      label
-    };
-    this.dayIntervals[date].push(interval);
-    this.save();
-    return interval;
-  },
-
-  updateDayInterval(date, id, start, end, label) {
-    if (!this.dayIntervals[date]) return;
-    const interval = this.dayIntervals[date].find(i => i.id === id);
-    if (interval) {
-      interval.start = start;
-      interval.end = end;
-      interval.label = label;
-      this.save();
-    }
-  },
-
-  deleteDayInterval(date, id) {
-    if (!this.dayIntervals[date]) return;
-    this.dayIntervals[date] = this.dayIntervals[date].filter(i => i.id !== id);
-    this.save();
-  },
-
-  getDayIntervals(date) {
-    return this.dayIntervals[date] || [];
-  },
-
-  // ========== Calorie Tracking ==========
-  setCalorieConfig(bmr, activityMultiplier) {
-    this.calorieConfig = { bmr, activityMultiplier };
-    this.ensureTodaysData(); // Recalculate today's target
-    this.save();
-  },
-
-  getCalorieStatus(date) {
-    if (!this.calorieExpenditure[date]) {
-      return { target: 0, consumed: 0, remaining: 0, percentage: 0 };
-    }
-    const exp = this.calorieExpenditure[date];
-    const consumed = exp.actualConsumed || 0;
-    const target = exp.targetExpenditure || 0;
-    return {
-      target,
-      consumed,
-      remaining: target - consumed,
-      percentage: target > 0 ? Math.round((consumed / target) * 100) : 0
-    };
-  },
-
-  addMealCalories(date, mealType, itemId, calories) {
-    const today = this.getTodayKey();
-    const updateDate = date || today;
-
-    if (!this.calorieExpenditure[updateDate]) {
-      this.calorieExpenditure[updateDate] = {
-        targetExpenditure: Math.round(this.calorieConfig.bmr * this.calorieConfig.activityMultiplier),
-        actualConsumed: 0
-      };
-    }
-
-    const meal = this.foodPlan[updateDate]?.[mealType];
-    if (meal) {
-      const item = meal.find(i => i.id === itemId);
-      if (item) {
-        const oldCals = item.calories || 0;
-        item.calories = calories;
-        this.calorieExpenditure[updateDate].actualConsumed += (calories - oldCals);
-        this.save();
-      }
-    }
-  },
-
-  // ========== Life Page: Principles ==========
-  addPrinciple(text) {
-    const principle = {
-      id: Date.now(),
-      text
-    };
-    this.lifePage.principles.push(principle);
-    this.save();
-    return principle;
-  },
-
-  updatePrinciple(id, text) {
-    const principle = this.lifePage.principles.find(p => p.id === id);
-    if (principle) {
-      principle.text = text;
-      this.save();
-    }
-  },
-
-  deletePrinciple(id) {
-    this.lifePage.principles = this.lifePage.principles.filter(p => p.id !== id);
-    this.save();
-  },
-
-  // ========== Life Page: Pillars ==========
-  addLifePillar(name) {
-    const pillar = {
-      id: Date.now(),
-      name,
-      status: 'stable'
-    };
-    this.lifePage.pillars.push(pillar);
-    this.save();
-    return pillar;
-  },
-
-  updatePillarStatus(id, status) {
-    const pillar = this.lifePage.pillars.find(p => p.id === id);
-    if (pillar) {
-      pillar.status = status;
-      this.save();
-    }
-  },
-
-  deleteLifePillar(id) {
-    this.lifePage.pillars = this.lifePage.pillars.filter(p => p.id !== id);
-    this.save();
-  },
-
-  // ========== Calendar Helpers ==========
-  getCalendarIndicators(date) {
-    const eventCount = this.events.filter(e => e.date === date).length;
-    const habitDone = this.habits.some(h => this.habitHistory[h.id]?.[date]);
-    const medDone = this.meds.some(m => this.habitHistory[m.id]?.[date]);
-    const mealsLogged = Object.values(this.foodPlan[date] || {})
-      .flat()
-      .some(meal => meal.done);
-
-    return { eventCount, habitDone, medDone, mealsLogged };
   }
 };
 
 // ========== UI State ==========
 let currentSection = 'today';
-let currentMode = null; // 'addSchedule', 'editSchedule', etc.
+let currentMode = null;
 let currentEditId = null;
+let nowIndicatorInterval = null;
 
 // ========== Init ==========
 document.addEventListener('DOMContentLoaded', () => {
   DataStore.init();
+  ThemeEngine.init();
+  ConfirmDialog.init();
   setupEventListeners();
   updateGreeting();
   updateDateDisplay();
+  startNowIndicator();
   renderSection('today');
 });
 
@@ -470,8 +486,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function updateGreeting() {
   const hour = new Date().getHours();
   let greeting = 'Good morning';
-  if (hour >= 12 && hour < 18) greeting = 'Good afternoon';
-  if (hour >= 18) greeting = 'Good evening';
+  if (hour >= 12 && hour < 17) greeting = 'Good afternoon';
+  if (hour >= 17 && hour < 21) greeting = 'Good evening';
+  if (hour >= 21 || hour < 5) greeting = 'Good night';
 
   const el = document.getElementById('greeting');
   if (el) el.textContent = greeting;
@@ -479,18 +496,68 @@ function updateGreeting() {
 
 function updateDateDisplay() {
   const options = { weekday: 'long', month: 'long', day: 'numeric' };
-  const dateStr = new Date().toLocaleDateString('en-US', options);
   const el = document.getElementById('dateDisplay');
-  if (el) el.textContent = dateStr;
+  if (el) el.textContent = new Date().toLocaleDateString('en-US', options);
 }
 
-// ========== Section Navigation ==========
+// ========== Now Indicator ==========
+function startNowIndicator() {
+  updateNowIndicator();
+  if (nowIndicatorInterval) clearInterval(nowIndicatorInterval);
+  nowIndicatorInterval = setInterval(updateNowIndicator, 60000);
+}
+
+function updateNowIndicator() {
+  const today = DataStore.getTodayKey();
+  const intervals = DataStore.getDayIntervals(today);
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const indicator = document.getElementById('nowIndicator');
+  const nowText = document.getElementById('nowText');
+  if (!indicator || !nowText) return;
+
+  // Find current interval
+  let current = null;
+  for (const iv of intervals) {
+    const s = timeToMinutes(iv.start);
+    const e = timeToMinutes(iv.end);
+    if (nowMin >= s && nowMin < e) { current = iv; break; }
+  }
+
+  if (current) {
+    nowText.textContent = current.label;
+    indicator.style.display = 'flex';
+  } else {
+    // Check if there's anything upcoming today
+    const upcoming = intervals
+      .filter(iv => timeToMinutes(iv.start) > nowMin)
+      .sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+
+    if (upcoming.length > 0) {
+      nowText.textContent = `Next: ${upcoming[0].label} at ${upcoming[0].start}`;
+      indicator.style.display = 'flex';
+    } else {
+      indicator.style.display = 'none';
+    }
+  }
+}
+
+// ========== Event Listeners ==========
 function setupEventListeners() {
-  // Navigation
+  // Top nav
   document.querySelectorAll('.nav-link').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const section = e.target.getAttribute('data-section');
-      renderSection(section);
+    btn.addEventListener('click', () => {
+      const section = btn.getAttribute('data-section');
+      if (section) renderSection(section);
+    });
+  });
+
+  // Bottom nav
+  document.querySelectorAll('.bottom-nav-link').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const section = btn.getAttribute('data-section');
+      if (section) renderSection(section);
     });
   });
 
@@ -498,87 +565,77 @@ function setupEventListeners() {
   document.getElementById('closeModal').addEventListener('click', closeModal);
   document.getElementById('cancelBtn').addEventListener('click', closeModal);
   document.getElementById('itemForm').addEventListener('submit', handleFormSubmit);
+  document.getElementById('modal').addEventListener('click', (e) => {
+    if (e.target.id === 'modal') closeModal();
+  });
 
-  // Today Section
-  document.getElementById('addTodayBtn').addEventListener('click', openAddScheduleModal);
+  // Today
+  document.getElementById('addTodayBtn').addEventListener('click', () => openAddIntervalModal(formatTime(new Date())));
 
-  // Habits Section
+  // Habits
   document.getElementById('addHabitBtn').addEventListener('click', openAddHabitModal);
 
-  // Food Section
-  document.getElementById('addMealBtn').addEventListener('click', openAddMealModal);
-
-  // Upcoming Section
+  // Upcoming
   document.getElementById('addEventBtn').addEventListener('click', openAddEventModal);
 
   // Settings
   document.getElementById('exportBtn').addEventListener('click', exportData);
-  document.getElementById('importBtn').addEventListener('click', () => {
-    document.getElementById('importFile').click();
-  });
+  document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
   document.getElementById('importFile').addEventListener('change', importData);
   document.getElementById('saveCalorieConfigBtn').addEventListener('click', saveCalorieConfig);
 
-  // Keyboard shortcuts
-  document.addEventListener('keydown', handleKeyboardShortcuts);
-
   // Quick capture
-  const quickCaptureInput = document.getElementById('quickCaptureInput');
-  quickCaptureInput.addEventListener('keydown', (e) => {
+  const qcInput = document.getElementById('quickCaptureInput');
+  qcInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-      const text = quickCaptureInput.value.trim();
+      const text = qcInput.value.trim();
       if (text) {
         DataStore.addScheduleItem(text, formatTime(new Date()));
-        quickCaptureInput.value = '';
+        qcInput.value = '';
         closeQuickCapture();
-        renderTimeline();
+        if (currentSection === 'today') renderMicroSchedule();
       }
     }
-    if (e.key === 'Escape') {
-      closeQuickCapture();
-    }
+    if (e.key === 'Escape') closeQuickCapture();
   });
+
+  // Quick capture backdrop
+  document.getElementById('quickCapture').addEventListener('click', (e) => {
+    if (e.target.id === 'quickCapture') closeQuickCapture();
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', handleKeyboardShortcuts);
 }
 
+// ========== Section Navigation ==========
 function renderSection(sectionName) {
   currentSection = sectionName;
 
-  // Update nav
+  // Update top nav
   document.querySelectorAll('.nav-link').forEach(btn => {
-    btn.classList.remove('active');
+    btn.classList.toggle('active', btn.getAttribute('data-section') === sectionName);
   });
-  document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
+
+  // Update bottom nav
+  document.querySelectorAll('.bottom-nav-link').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-section') === sectionName);
+  });
 
   // Update sections
-  document.querySelectorAll('.section').forEach(s => {
-    s.classList.remove('active');
-  });
-  document.getElementById(sectionName).classList.add('active');
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  const target = document.getElementById(sectionName);
+  if (target) target.classList.add('active');
 
-  // Render content
   switch (sectionName) {
-    case 'today':
-      renderMicroSchedule();
-      break;
-    case 'habits':
-      renderHabits();
-      renderHeatmap();
-      break;
-    case 'food':
-      renderMeals();
-      break;
-    case 'upcoming':
-      renderUpcoming();
-      break;
-    case 'calendar':
-      renderCalendar();
-      break;
-    case 'life':
-      renderLifePage();
-      break;
-    case 'week':
-      renderWeekOverview();
-      break;
+    case 'today':     renderMicroSchedule(); break;
+    case 'habits':    renderHabits(); renderHeatmap(); break;
+    case 'food':      renderMeals(); break;
+    case 'upcoming':  renderUpcoming(); break;
+    case 'calendar':  renderCalendar(); break;
+    case 'life':      renderLifePage(); break;
+    case 'week':      renderWeekOverview(); break;
+    case 'settings':  renderSettings(); break;
   }
 }
 
@@ -587,227 +644,178 @@ function renderMicroSchedule() {
   const today = DataStore.getTodayKey();
   const intervals = DataStore.getDayIntervals(today);
   const container = document.getElementById('timeline');
+  if (!container) return;
 
-  // Generate time slots (6am to 11pm, 15-min intervals)
   const startHour = 6;
   const endHour = 24;
   const intervalMinutes = 15;
-  const slots = [];
-
-  for (let h = startHour; h < endHour; h++) {
-    for (let m = 0; m < 60; m += intervalMinutes) {
-      slots.push({ hour: h, minute: m, timeStr: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` });
-    }
-  }
+  const totalSlots = ((endHour - startHour) * 60) / intervalMinutes;
+  const slotHeight = 48; // px per slot
+  const totalHeight = totalSlots * slotHeight;
 
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const nowPercent = Math.max(0, Math.min(100, ((nowMinutes - startHour * 60) / (totalSlots * intervalMinutes)) * 100));
 
-  let html = '<div class="micro-schedule">';
-  html += '<div class="micro-schedule-times">';
+  let html = `<div class="micro-schedule" style="height:${totalHeight}px;">`;
 
-  // Render time column and slots
-  slots.forEach((slot, idx) => {
-    const slotMinutes = slot.hour * 60 + slot.minute;
-    const isNow = Math.abs(slotMinutes - nowMinutes) < 15;
-    const isNowColumn = slotMinutes <= nowMinutes && nowMinutes < slotMinutes + 15;
+  // Time labels column
+  html += '<div class="micro-times">';
+  for (let h = startHour; h < endHour; h++) {
+    const label = h <= 12 ? `${h}am` : `${h - 12}pm`;
+    html += `<div class="micro-time-label" style="top:${((h - startHour) * 60 / intervalMinutes) * slotHeight}px;">${h === 12 ? '12pm' : label}</div>`;
+  }
+  html += '</div>';
 
-    // Time label (only show every hour)
-    if (slot.minute === 0) {
-      html += `<div class="micro-time-label">${slot.timeStr}</div>`;
-    } else {
-      html += `<div class="micro-time-label" style="color: transparent;"></div>`;
-    }
+  // Slots column
+  html += '<div class="micro-slots">';
+  for (let i = 0; i < totalSlots; i++) {
+    const slotMin = startHour * 60 + i * intervalMinutes;
+    const h = Math.floor(slotMin / 60);
+    const m = slotMin % 60;
+    const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const isHourMark = m === 0;
+    html += `<div class="micro-slot ${isHourMark ? 'hour-mark' : ''}" style="height:${slotHeight}px;" onclick="openAddIntervalModal('${timeStr}')" title="${timeStr}"></div>`;
+  }
+  html += '</div>';
 
-    // Slot background
-    html += `<div class="micro-slot ${isNow ? 'is-now' : ''} ${isNowColumn ? 'is-now-column' : ''}"
-              onclick="openAddIntervalModal('${slot.timeStr}')"
-              data-slot-time="${slot.timeStr}"></div>`;
+  // Now line
+  html += `<div class="now-line" style="top:${nowPercent}%;" id="nowLine">
+             <div class="now-line-dot"></div>
+             <div class="now-line-tail"></div>
+           </div>`;
+
+  // Intervals
+  intervals.forEach(iv => {
+    const sMin = timeToMinutes(iv.start);
+    const eMin = timeToMinutes(iv.end);
+    if (sMin < startHour * 60 || eMin > endHour * 60) return;
+    const topPx = ((sMin - startHour * 60) / intervalMinutes) * slotHeight;
+    const heightPx = Math.max(((eMin - sMin) / intervalMinutes) * slotHeight, 28);
+
+    html += `<div class="micro-interval" style="top:${topPx}px;height:${heightPx}px;" data-id="${iv.id}">
+               <div class="micro-interval-inner">
+                 <span class="micro-interval-label">${escapeHtml(iv.label)}</span>
+                 <span class="micro-interval-range">${iv.start}–${iv.end}</span>
+               </div>
+               <div class="micro-interval-actions">
+                 <button class="btn-ghost" onclick="openEditIntervalModal(${iv.id})" aria-label="Edit">Edit</button>
+                 <button class="btn-ghost" onclick="deleteInterval(${iv.id})" aria-label="Delete">×</button>
+               </div>
+             </div>`;
   });
 
-  html += '</div>';
+  html += '</div>'; // .micro-schedule
 
-  // Render intervals on top
-  if (intervals.length > 0) {
-    intervals.forEach(interval => {
-      const startMinutes = timeToMinutes(interval.start);
-      const endMinutes = timeToMinutes(interval.end);
-      const topPercent = ((startMinutes - startHour * 60) / (slots.length * (intervalMinutes / 60))) * 100;
-      const heightPercent = ((endMinutes - startMinutes) / (slots.length * (intervalMinutes / 60))) * 100;
-
-      html += `
-        <div class="micro-interval"
-             style="top: ${topPercent}%; height: ${heightPercent}%;"
-             onmousedown="startDragResize(event, ${interval.id})">
-          <div class="micro-interval-content">
-            <div class="micro-interval-time">${interval.start}–${interval.end}</div>
-            <div class="micro-interval-label">${escapeHtml(interval.label)}</div>
-          </div>
-          <div class="micro-interval-actions">
-            <button class="btn btn-secondary btn-small" onclick="openEditIntervalModal(${interval.id}, '${interval.start}', '${interval.end}')">Edit</button>
-            <button class="btn btn-danger btn-small" onclick="deleteInterval(${interval.id})">Delete</button>
-          </div>
-        </div>
-      `;
-    });
+  // Empty state
+  if (intervals.length === 0) {
+    html += `<div class="empty-state">
+               <p>Nothing planned yet — click any time block or press <kbd>N</kbd> to add your first thing for today</p>
+             </div>`;
   }
 
-  html += '</div>';
   container.innerHTML = html;
-
-  if (intervals.length === 0 && document.querySelector('.empty-state')) {
-    container.innerHTML += `
-      <div class="empty-state">
-        <p>Click any time slot to add an event, or use the + button above</p>
-      </div>
-    `;
-  }
+  updateNowIndicator();
 }
 
 function openAddIntervalModal(time) {
   currentMode = 'addInterval';
   currentEditId = null;
 
-  // Calculate default end time (30 mins later)
   const [hours, mins] = time.split(':').map(Number);
-  const endHours = String(Math.min(hours + (mins + 30) / 60 | 0, 23)).padStart(2, '0');
-  const endMins = String((mins + 30) % 60).padStart(2, '0');
-  const endTime = `${endHours}:${endMins}`;
+  const endTotal = hours * 60 + mins + 60;
+  const endH = String(Math.min(Math.floor(endTotal / 60), 23)).padStart(2, '0');
+  const endM = String(endTotal % 60).padStart(2, '0');
 
+  document.getElementById('modalTitle').textContent = 'Add to today';
   document.getElementById('formFields').innerHTML = `
     <div class="form-group">
-      <label for="intervalLabel">Event</label>
-      <input type="text" id="intervalLabel" placeholder="e.g. Team standup" maxlength="100" required>
+      <label for="intervalLabel">What's happening?</label>
+      <input type="text" id="intervalLabel" placeholder="e.g. Therapy call, Deep work" maxlength="100" required>
     </div>
-    <div class="form-group">
-      <label for="intervalStart">Start</label>
-      <input type="time" id="intervalStart" value="${time}" required>
-    </div>
-    <div class="form-group">
-      <label for="intervalEnd">End</label>
-      <input type="time" id="intervalEnd" value="${endTime}" required>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="intervalStart">Start</label>
+        <input type="time" id="intervalStart" value="${time}" required>
+      </div>
+      <div class="form-group">
+        <label for="intervalEnd">End</label>
+        <input type="time" id="intervalEnd" value="${endH}:${endM}" required>
+      </div>
     </div>
   `;
   openModal();
   setTimeout(() => document.getElementById('intervalLabel').focus(), 100);
 }
 
-function openEditIntervalModal(id, start, end) {
+function openEditIntervalModal(id) {
   currentMode = 'editInterval';
   currentEditId = id;
   const today = DataStore.getTodayKey();
   const interval = DataStore.getDayIntervals(today).find(i => i.id === id);
+  if (!interval) return;
 
+  document.getElementById('modalTitle').textContent = 'Edit time block';
   document.getElementById('formFields').innerHTML = `
     <div class="form-group">
-      <label for="intervalLabel">Event</label>
-      <input type="text" id="intervalLabel" placeholder="e.g. Team standup" maxlength="100" value="${escapeHtml(interval.label)}" required>
+      <label for="intervalLabel">What's happening?</label>
+      <input type="text" id="intervalLabel" placeholder="e.g. Therapy call" maxlength="100" value="${escapeHtml(interval.label)}" required>
     </div>
-    <div class="form-group">
-      <label for="intervalStart">Start</label>
-      <input type="time" id="intervalStart" value="${start}" required>
-    </div>
-    <div class="form-group">
-      <label for="intervalEnd">End</label>
-      <input type="time" id="intervalEnd" value="${end}" required>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="intervalStart">Start</label>
+        <input type="time" id="intervalStart" value="${interval.start}" required>
+      </div>
+      <div class="form-group">
+        <label for="intervalEnd">End</label>
+        <input type="time" id="intervalEnd" value="${interval.end}" required>
+      </div>
     </div>
   `;
   openModal();
 }
 
-function deleteInterval(id) {
-  if (confirm('Remove this time block?')) {
+async function deleteInterval(id) {
+  const confirmed = await ConfirmDialog.open('Remove this time block?', 'This will remove it from today\'s schedule.');
+  if (confirmed) {
     const today = DataStore.getTodayKey();
     DataStore.deleteDayInterval(today, id);
     renderMicroSchedule();
   }
 }
 
-// Drag-to-resize helper (placeholder — simplified implementation)
-let dragState = null;
-function startDragResize(e, intervalId) {
-  if (e.target.closest('.micro-interval-actions')) return;
-  dragState = { intervalId, startY: e.clientY };
-}
-
-// Keep old renderTimeline as fallback for simple view
-function renderTimeline() {
-  renderMicroSchedule();
-}
-
-function openAddScheduleModal() {
-  currentMode = 'addSchedule';
-  currentEditId = null;
-  document.getElementById('formFields').innerHTML = `
-    <div class="form-group">
-      <label for="scheduleTitle">What's happening?</label>
-      <input type="text" id="scheduleTitle" placeholder="e.g. Therapy call" maxlength="100" required>
-    </div>
-    <div class="form-group">
-      <label for="scheduleTime">Time</label>
-      <input type="time" id="scheduleTime" required>
-    </div>
-  `;
-  openModal();
-  setTimeout(() => document.getElementById('scheduleTitle').focus(), 100);
-}
-
-function openEditScheduleModal(id) {
-  currentMode = 'editSchedule';
-  currentEditId = id;
-  const today = DataStore.getTodayKey();
-  const item = DataStore.schedule[today].find(i => i.id === id);
-
-  document.getElementById('formFields').innerHTML = `
-    <div class="form-group">
-      <label for="scheduleTitle">What's happening?</label>
-      <input type="text" id="scheduleTitle" placeholder="e.g. Therapy call" maxlength="100" value="${escapeHtml(item.title)}" required>
-    </div>
-    <div class="form-group">
-      <label for="scheduleTime">Time</label>
-      <input type="time" id="scheduleTime" value="${item.time}" required>
-    </div>
-  `;
-  openModal();
-}
-
-function deleteScheduleItem(id) {
-  if (confirm('Remove this item from today?')) {
-    DataStore.deleteScheduleItem(id);
-    renderTimeline();
-  }
-}
-
 // ========== Habits & Meds ==========
 function renderHabits() {
-  const habitsList = document.getElementById('habitsList');
+  const container = document.getElementById('habitsList');
+  if (!container) return;
+
   const allItems = [
     ...DataStore.habits.map(h => ({ ...h, isDone: DataStore.isHabitDone(h.id) })),
     ...DataStore.meds.map(m => ({ ...m, isDone: DataStore.isHabitDone(m.id) }))
   ].sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
   if (allItems.length === 0) {
-    habitsList.innerHTML = `
-      <div class="empty-state">
-        <p>No habits or meds yet — add one to get started</p>
-      </div>
-    `;
+    container.innerHTML = `<div class="empty-state"><p>No habits or meds yet — add one to start building your rhythm</p></div>`;
     return;
   }
 
-  habitsList.innerHTML = allItems.map(item => {
+  container.innerHTML = allItems.map(item => {
     const streak = DataStore.getHabitStreak(item.id);
+    const typeLabel = item.type === 'med' ? 'Medication' : 'Habit';
     return `
-      <div class="habit-item ${item.isDone ? 'done' : ''}">
-        <input type="checkbox" class="habit-checkbox" ${item.isDone ? 'checked' : ''} onchange="toggleHabit(${item.id})">
+      <div class="habit-item ${item.isDone ? 'done' : ''}" data-id="${item.id}">
+        <input type="checkbox" class="habit-checkbox" ${item.isDone ? 'checked' : ''} onchange="toggleHabit(${item.id})" aria-label="Mark ${escapeHtml(item.name)} as ${item.isDone ? 'not done' : 'done'}">
         <div class="habit-info">
           <div class="habit-name">${escapeHtml(item.name)}</div>
-          ${item.time ? `<div class="habit-time">${item.time}</div>` : ''}
+          <div class="habit-meta">
+            ${item.time ? `<span class="habit-time">${item.time}</span>` : ''}
+            <span class="habit-type-tag">${typeLabel}</span>
+          </div>
         </div>
-        ${streak > 0 ? `<div class="habit-streak">${streak}🔥</div>` : ''}
+        ${streak > 0 ? `<div class="habit-streak" title="${streak} day streak">${streak} day${streak > 1 ? 's' : ''} 🔥</div>` : ''}
         <div class="habit-actions">
-          <button class="btn btn-secondary btn-small" onclick="openEditHabitModal(${item.id}, '${item.type}')">Edit</button>
-          <button class="btn btn-danger btn-small" onclick="deleteHabitItem(${item.id}, '${item.type}')">Delete</button>
+          <button class="btn-ghost" onclick="openEditHabitModal(${item.id}, '${item.type}')" aria-label="Edit">Edit</button>
+          <button class="btn-ghost" onclick="deleteHabitItem(${item.id}, '${item.type}')" aria-label="Delete">×</button>
         </div>
       </div>
     `;
@@ -815,66 +823,48 @@ function renderHabits() {
 }
 
 function renderHeatmap() {
-  // Show heatmap for the first habit/med, or all combined
   const allItems = [...DataStore.habits, ...DataStore.meds];
+  const strip = document.getElementById('heatmapStrip');
+  if (!strip) return;
+
   if (allItems.length === 0) {
-    document.getElementById('heatmapStrip').innerHTML = '<p style="color: #7A7568; font-size: 0.9rem;">Add a habit to see your streak</p>';
+    strip.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">Add a habit to see your consistency</p>';
     return;
   }
 
-  // Combine all habit/med completions
-  const combinedHistory = {};
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const key = date.toISOString().split('T')[0];
+  const days = 30;
+  let html = '';
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().split('T')[0];
     let completed = 0;
-    let total = allItems.length;
-    allItems.forEach(item => {
-      if (DataStore.habitHistory[item.id]?.[key]) {
-        completed++;
-      }
-    });
-    combinedHistory[key] = { completed, total };
-  }
+    allItems.forEach(item => { if (DataStore.habitHistory[item.id]?.[key]) completed++; });
 
-  const strip = document.getElementById('heatmapStrip');
-  strip.innerHTML = Object.entries(combinedHistory).map(([date, data]) => {
-    let className = 'heatmap-day';
-    if (data.completed === data.total && data.total > 0) {
-      className += ' done';
-    } else if (data.completed > 0) {
-      className += ' partial';
-    }
-    const dateObj = new Date(date);
-    const tooltip = `${dateObj.toLocaleDateString()}: ${data.completed}/${data.total}`;
-    return `<div class="heatmap-day ${className}" title="${tooltip}"></div>`;
-  }).join('');
+    let cls = 'heatmap-day';
+    if (completed === allItems.length && allItems.length > 0) cls += ' done';
+    else if (completed > 0) cls += ' partial';
+
+    const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    html += `<div class="${cls}" title="${dateLabel}: ${completed}/${allItems.length}"></div>`;
+  }
+  strip.innerHTML = html;
 }
 
 function toggleHabit(id) {
   DataStore.toggleHabit(id);
   renderHabits();
   renderHeatmap();
-  // Satisfying animation
-  const items = document.querySelectorAll('.habit-item');
-  items.forEach(item => {
-    if (item.querySelector('input').checked) {
-      item.style.animation = 'none';
-      setTimeout(() => {
-        item.style.animation = '';
-      }, 10);
-    }
-  });
 }
 
 function openAddHabitModal() {
   currentMode = 'addHabit';
   currentEditId = null;
+  document.getElementById('modalTitle').textContent = 'Add habit or medication';
   document.getElementById('formFields').innerHTML = `
     <div class="form-group">
       <label for="habitType">Type</label>
-      <select id="habitType" required style="padding: 0.75rem 1rem; border: 1px solid #E4E0D4; border-radius: 12px; font-family: 'Figtree', sans-serif; font-size: 0.95rem; background-color: #FDFCF8;">
+      <select id="habitType">
         <option value="habit">Habit</option>
         <option value="med">Medication</option>
       </select>
@@ -897,18 +887,20 @@ function openEditHabitModal(id, type) {
   currentEditId = id;
   const items = type === 'med' ? DataStore.meds : DataStore.habits;
   const item = items.find(i => i.id === id);
+  if (!item) return;
 
+  document.getElementById('modalTitle').textContent = 'Edit';
   document.getElementById('formFields').innerHTML = `
     <div class="form-group">
       <label for="habitType">Type</label>
-      <select id="habitType" required style="padding: 0.75rem 1rem; border: 1px solid #E4E0D4; border-radius: 12px; font-family: 'Figtree', sans-serif; font-size: 0.95rem; background-color: #FDFCF8;">
+      <select id="habitType">
         <option value="habit" ${type === 'habit' ? 'selected' : ''}>Habit</option>
         <option value="med" ${type === 'med' ? 'selected' : ''}>Medication</option>
       </select>
     </div>
     <div class="form-group">
       <label for="habitName">Name</label>
-      <input type="text" id="habitName" placeholder="e.g. Morning meds, Exercise" maxlength="100" value="${escapeHtml(item.name)}" required>
+      <input type="text" id="habitName" placeholder="e.g. Morning meds" maxlength="100" value="${escapeHtml(item.name)}" required>
     </div>
     <div class="form-group">
       <label for="habitTime">Time (optional)</label>
@@ -918,13 +910,11 @@ function openEditHabitModal(id, type) {
   openModal();
 }
 
-function deleteHabitItem(id, type) {
-  if (confirm('Remove this habit? Streak history will be deleted.')) {
-    if (type === 'med') {
-      DataStore.deleteMed(id);
-    } else {
-      DataStore.deleteHabit(id);
-    }
+async function deleteHabitItem(id, type) {
+  const confirmed = await ConfirmDialog.open('Remove this ' + (type === 'med' ? 'medication' : 'habit') + '?', 'Your streak history for this item will be lost.');
+  if (confirmed) {
+    if (type === 'med') DataStore.deleteMed(id);
+    else DataStore.deleteHabit(id);
     renderHabits();
     renderHeatmap();
   }
@@ -932,36 +922,51 @@ function deleteHabitItem(id, type) {
 
 // ========== Food Plan ==========
 function renderMeals() {
+  const container = document.getElementById('mealsContainer');
+  if (!container) return;
+
   const today = DataStore.getTodayKey();
   const meals = DataStore.foodPlan[today];
-  const container = document.getElementById('mealsContainer');
-
   const mealTypes = [
-    { key: 'breakfast', label: 'Breakfast' },
-    { key: 'lunch', label: 'Lunch' },
-    { key: 'dinner', label: 'Dinner' },
-    { key: 'snacks', label: 'Snacks' }
+    { key: 'breakfast', label: 'Breakfast', icon: 'sunrise' },
+    { key: 'lunch', label: 'Lunch', icon: 'sun' },
+    { key: 'dinner', label: 'Dinner', icon: 'moon' },
+    { key: 'snacks', label: 'Snacks', icon: 'leaf' }
   ];
 
   container.innerHTML = mealTypes.map(meal => `
-    <div class="meal-section">
-      <div class="meal-label">${meal.label}</div>
+    <div class="meal-card">
+      <div class="meal-card-header">
+        <div class="meal-card-icon ${meal.key}">
+          ${getMealIcon(meal.icon)}
+        </div>
+        <span class="meal-label">${meal.label}</span>
+      </div>
       <div class="meal-items">
         ${(meals[meal.key] || []).map(item => `
           <div class="meal-item ${item.done ? 'eaten' : ''}">
-            <input type="checkbox" class="meal-checkbox" ${item.done ? 'checked' : ''} onchange="toggleMeal('${meal.key}', ${item.id})">
-            <div class="meal-text">${escapeHtml(item.text)}</div>
-            <div class="meal-actions">
-              <button class="btn btn-danger btn-small" onclick="deleteMeal('${meal.key}', ${item.id})">Delete</button>
-            </div>
+            <input type="checkbox" class="meal-checkbox" ${item.done ? 'checked' : ''} onchange="toggleMeal('${meal.key}', ${item.id})" aria-label="Mark ${escapeHtml(item.text)} as ${item.done ? 'not eaten' : 'eaten'}">
+            <span class="meal-text">${escapeHtml(item.text)}</span>
+            <button class="meal-delete" onclick="deleteMeal('${meal.key}', ${item.id})" aria-label="Delete">×</button>
           </div>
         `).join('')}
       </div>
-      <div class="meal-add">
-        <input type="text" class="meal-input" placeholder="Add item..." maxlength="100" onkeypress="if(event.key==='Enter') addMealItem('${meal.key}', this)">
+      <div class="meal-add-row">
+        <input type="text" class="meal-input" placeholder="Add something..." maxlength="100"
+               onkeydown="if(event.key==='Enter'){addMealItem('${meal.key}',this);}">
       </div>
     </div>
   `).join('');
+}
+
+function getMealIcon(name) {
+  const icons = {
+    sunrise: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="4"/><path d="M12 8a4 4 0 0 1 4 4"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+    leaf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.77 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>'
+  };
+  return icons[name] || icons.leaf;
 }
 
 function addMealItem(mealType, input) {
@@ -978,35 +983,36 @@ function toggleMeal(mealType, id) {
   renderMeals();
 }
 
-function deleteMeal(mealType, id) {
-  DataStore.deleteMealItem(mealType, id);
-  renderMeals();
+async function deleteMeal(mealType, id) {
+  const confirmed = await ConfirmDialog.open('Remove this item?', '');
+  if (confirmed) {
+    DataStore.deleteMealItem(mealType, id);
+    renderMeals();
+  }
 }
 
 // ========== Upcoming ==========
 function renderUpcoming() {
-  const events = DataStore.getUpcomingEvents();
   const container = document.getElementById('upcomingList');
+  if (!container) return;
+
+  const events = DataStore.getUpcomingEvents();
 
   if (events.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <p>No upcoming events — add one when you have something planned</p>
-      </div>
-    `;
+    container.innerHTML = `<div class="empty-state"><p>Nothing on the horizon — add an event when something comes up</p></div>`;
     return;
   }
 
-  let currentDate = '';
   let html = '';
+  let currentDate = '';
 
   events.forEach(event => {
-    const eventDate = new Date(event.date);
+    const eventDate = new Date(event.date + 'T00:00:00');
     const dateStr = eventDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
     if (currentDate !== event.date) {
       currentDate = event.date;
-      html += `<div class="upcoming-date"><div class="upcoming-date-label">${dateStr}</div></div>`;
+      html += `<div class="upcoming-date-group"><div class="upcoming-date-label">${dateStr}</div></div>`;
     }
 
     html += `
@@ -1016,8 +1022,8 @@ function renderUpcoming() {
           <div class="upcoming-title">${escapeHtml(event.title)}</div>
         </div>
         <div class="upcoming-actions">
-          <button class="btn btn-secondary btn-small" onclick="openEditEventModal(${event.id})">Edit</button>
-          <button class="btn btn-danger btn-small" onclick="deleteEvent(${event.id})">Delete</button>
+          <button class="btn-ghost" onclick="openEditEventModal(${event.id})" aria-label="Edit">Edit</button>
+          <button class="btn-ghost" onclick="deleteEvent(${event.id})" aria-label="Delete">×</button>
         </div>
       </div>
     `;
@@ -1031,20 +1037,22 @@ function openAddEventModal() {
   currentEditId = null;
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const dateStr = tomorrow.toISOString().split('T')[0];
 
+  document.getElementById('modalTitle').textContent = 'Add event';
   document.getElementById('formFields').innerHTML = `
     <div class="form-group">
-      <label for="eventTitle">Event</label>
+      <label for="eventTitle">What's happening?</label>
       <input type="text" id="eventTitle" placeholder="e.g. Doctor's appointment" maxlength="100" required>
     </div>
-    <div class="form-group">
-      <label for="eventDate">Date</label>
-      <input type="date" id="eventDate" value="${dateStr}" required>
-    </div>
-    <div class="form-group">
-      <label for="eventTime">Time (optional)</label>
-      <input type="time" id="eventTime">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="eventDate">Date</label>
+        <input type="date" id="eventDate" value="${tomorrow.toISOString().split('T')[0]}" required>
+      </div>
+      <div class="form-group">
+        <label for="eventTime">Time (optional)</label>
+        <input type="time" id="eventTime">
+      </div>
     </div>
   `;
   openModal();
@@ -1055,26 +1063,31 @@ function openEditEventModal(id) {
   currentMode = 'editEvent';
   currentEditId = id;
   const event = DataStore.events.find(e => e.id === id);
+  if (!event) return;
 
+  document.getElementById('modalTitle').textContent = 'Edit event';
   document.getElementById('formFields').innerHTML = `
     <div class="form-group">
-      <label for="eventTitle">Event</label>
+      <label for="eventTitle">What's happening?</label>
       <input type="text" id="eventTitle" placeholder="e.g. Doctor's appointment" maxlength="100" value="${escapeHtml(event.title)}" required>
     </div>
-    <div class="form-group">
-      <label for="eventDate">Date</label>
-      <input type="date" id="eventDate" value="${event.date}" required>
-    </div>
-    <div class="form-group">
-      <label for="eventTime">Time (optional)</label>
-      <input type="time" id="eventTime" value="${event.time || ''}">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="eventDate">Date</label>
+        <input type="date" id="eventDate" value="${event.date}" required>
+      </div>
+      <div class="form-group">
+        <label for="eventTime">Time (optional)</label>
+        <input type="time" id="eventTime" value="${event.time || ''}">
+      </div>
     </div>
   `;
   openModal();
 }
 
-function deleteEvent(id) {
-  if (confirm('Remove this event?')) {
+async function deleteEvent(id) {
+  const confirmed = await ConfirmDialog.open('Remove this event?', '');
+  if (confirmed) {
     DataStore.deleteEvent(id);
     renderUpcoming();
   }
@@ -1082,37 +1095,40 @@ function deleteEvent(id) {
 
 // ========== Week Overview ==========
 function renderWeekOverview() {
-  const overview = document.getElementById('weekOverview');
-  const days = 7;
-  let html = '';
+  const container = document.getElementById('weekOverview');
+  if (!container) return;
 
-  for (let i = 0; i < days; i++) {
+  let html = '';
+  for (let i = 0; i < 7; i++) {
     const date = new Date();
     date.setDate(date.getDate() + i);
     const dateKey = date.toISOString().split('T')[0];
-    const dateStr = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    const isToday = i === 0;
+    const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
 
-    const scheduleItems = (DataStore.schedule[dateKey] || []).length;
+    const intervals = DataStore.getDayIntervals(dateKey);
 
     let habitsCompleted = 0;
-    let habitsTotal = DataStore.habits.length + DataStore.meds.length;
+    const habitsTotal = DataStore.habits.length + DataStore.meds.length;
     [...DataStore.habits, ...DataStore.meds].forEach(item => {
-      if (DataStore.habitHistory[item.id]?.[dateKey]) {
-        habitsCompleted++;
-      }
+      if (DataStore.habitHistory[item.id]?.[dateKey]) habitsCompleted++;
     });
 
     const meals = DataStore.foodPlan[dateKey];
-    const totalMeals = Object.values(meals).flat().length;
-    const eatenMeals = Object.values(meals).flat().filter(m => m.done).length;
+    const totalMeals = Object.values(meals || {}).flat().length;
+    const eatenMeals = Object.values(meals || {}).flat().filter(m => m.done).length;
+
+    const calStatus = DataStore.getCalorieStatus(dateKey);
 
     html += `
-      <div class="week-day">
-        <div class="week-day-header">${dateStr}</div>
+      <div class="week-day ${isToday ? 'today-card' : ''}">
+        <div class="week-day-header">${isToday ? 'Today' : dayName}</div>
+        <div class="week-day-date">${dateStr}</div>
         <div class="week-stats">
           <div class="stat">
-            <span class="stat-label">Scheduled</span>
-            <span class="stat-value">${scheduleItems}</span>
+            <span class="stat-label">Time blocks</span>
+            <span class="stat-value">${intervals.length}</span>
           </div>
           <div class="stat">
             <span class="stat-label">Habits & Meds</span>
@@ -1122,230 +1138,175 @@ function renderWeekOverview() {
             <span class="stat-label">Meals</span>
             <span class="stat-value">${eatenMeals}/${totalMeals}</span>
           </div>
+          ${calStatus.target > 0 ? `
+          <div class="stat">
+            <span class="stat-label">Calories</span>
+            <span class="stat-value">${calStatus.consumed}/${calStatus.target}</span>
+          </div>` : ''}
         </div>
       </div>
     `;
   }
 
-  overview.innerHTML = html;
+  container.innerHTML = html;
 }
 
 // ========== Calendar View ==========
 function renderCalendar() {
   const container = document.getElementById('calendarGrid');
+  if (!container) return;
+
   const today = new Date();
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
-
-  // Get first day of month and number of days
   const firstDay = new Date(currentYear, currentMonth, 1);
   const lastDay = new Date(currentYear, currentMonth + 1, 0);
   const daysInMonth = lastDay.getDate();
   const startingDayOfWeek = firstDay.getDay();
-
-  // Month header
   const monthName = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  let html = `<h3 class="calendar-month-header">${monthName}</h3>`;
-  html += '<div class="calendar-grid">';
 
-  // Day headers
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  dayNames.forEach(day => {
-    html += `<div class="calendar-day-header">${day}</div>`;
+  let html = `<h3 class="calendar-month-header">${monthName}</h3><div class="calendar-grid">`;
+
+  ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => {
+    html += `<div class="calendar-day-header">${d}</div>`;
   });
 
-  // Empty cells before first day
   for (let i = 0; i < startingDayOfWeek; i++) {
     html += '<div class="calendar-day empty"></div>';
   }
 
-  // Days of month
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const indicators = DataStore.getCalendarIndicators(dateStr);
     const isToday = day === today.getDate();
 
     html += `<div class="calendar-day ${isToday ? 'is-today' : ''}">
-              <div class="calendar-day-number">${day}</div>
-              <div class="calendar-indicators">`;
-
-    // Event dot
-    if (indicators.eventCount > 0) {
-      html += `<div class="calendar-indicator event-indicator" title="${indicators.eventCount} event(s)"></div>`;
-    }
-
-    // Habit/med ring
-    if (indicators.habitDone || indicators.medDone) {
-      html += `<div class="calendar-indicator habit-indicator" title="Habit completed"></div>`;
-    }
-
-    // Meals ring
-    if (indicators.mealsLogged) {
-      html += `<div class="calendar-indicator meal-indicator" title="Meals logged"></div>`;
-    }
-
-    html += `    </div>
-            </div>`;
+               <div class="calendar-day-number">${day}</div>
+               <div class="calendar-indicators">`;
+    if (indicators.eventCount > 0) html += `<div class="calendar-indicator event" title="${indicators.eventCount} event(s)"></div>`;
+    if (indicators.habitDone || indicators.medDone) html += `<div class="calendar-indicator habit" title="Habit/med completed"></div>`;
+    if (indicators.mealsLogged) html += `<div class="calendar-indicator meal" title="Meals logged"></div>`;
+    html += `</div></div>`;
   }
 
   html += '</div>';
   container.innerHTML = html;
 }
 
-// ========== Life Page (Command Center) ==========
+// ========== Life Page ==========
 function renderLifePage() {
   const container = document.getElementById('lifeContainer');
+  if (!container) return;
 
-  // Calculate dashboard stats
-  const today = DataStore.getTodayKey();
   const allItems = [...DataStore.habits, ...DataStore.meds];
 
   let topStreak = { name: '', count: 0 };
   allItems.forEach(item => {
     const streak = DataStore.getHabitStreak(item.id);
-    if (streak > topStreak.count) {
-      topStreak = { name: item.name, count: streak };
-    }
+    if (streak > topStreak.count) topStreak = { name: item.name, count: streak };
   });
 
-  // Next event
   const upcoming = DataStore.getUpcomingEvents(1);
   const nextEvent = upcoming.length > 0 ? upcoming[0] : null;
 
-  // Week stats
-  let weekHabitsCompleted = 0;
-  let weekHabitsTotal = 0;
-  let weekMealsLogged = 0;
-  let weekMealsTotal = 0;
+  let weekHabitsCompleted = 0, weekHabitsTotal = 0;
+  let weekMealsLogged = 0, weekMealsTotal = 0;
   let daysWithinCalorieTarget = 0;
 
   for (let i = 0; i < 7; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    const dateKey = date.toISOString().split('T')[0];
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dk = d.toISOString().split('T')[0];
 
     allItems.forEach(item => {
       weekHabitsTotal++;
-      if (DataStore.habitHistory[item.id]?.[dateKey]) {
-        weekHabitsCompleted++;
-      }
+      if (DataStore.habitHistory[item.id]?.[dk]) weekHabitsCompleted++;
     });
 
-    const meals = DataStore.foodPlan[dateKey];
-    Object.values(meals || {}).flat().forEach(meal => {
+    Object.values(DataStore.foodPlan[dk] || {}).flat().forEach(meal => {
       weekMealsTotal++;
       if (meal.done) weekMealsLogged++;
     });
 
-    const calorieStatus = DataStore.getCalorieStatus(dateKey);
-    if (calorieStatus.target > 0 && Math.abs(calorieStatus.consumed - calorieStatus.target) < calorieStatus.target * 0.1) {
-      daysWithinCalorieTarget++;
-    }
+    const cs = DataStore.getCalorieStatus(dk);
+    if (cs.target > 0 && Math.abs(cs.consumed - cs.target) < cs.target * 0.1) daysWithinCalorieTarget++;
   }
 
   const weekHabitsPercent = weekHabitsTotal > 0 ? Math.round((weekHabitsCompleted / weekHabitsTotal) * 100) : 0;
 
-  html = `<div class="life-container-inner">
-            <!-- Column 1: Principles -->
-            <div class="life-column principles-column">
-              <h3>North Stars</h3>
-              <div class="principles-list" id="principlesList">`;
+  let html = '<div class="life-grid">';
 
-  DataStore.lifePage.principles.forEach(principle => {
+  // Column 1: Principles
+  html += `<div class="life-column"><h3>North Stars</h3><div class="principles-list">`;
+  DataStore.lifePage.principles.forEach(p => {
     html += `<div class="principle-item">
-              <span class="principle-text">${escapeHtml(principle.text)}</span>
-              <button class="btn btn-danger btn-small" onclick="deletePrinciple(${principle.id})">×</button>
-            </div>`;
+               <span class="principle-text">${escapeHtml(p.text)}</span>
+               <button class="btn-ghost" onclick="deletePrinciple(${p.id})" aria-label="Delete">×</button>
+             </div>`;
   });
+  html += `</div><button class="btn btn-secondary" style="width:100%;margin-top:1rem;" onclick="openAddPrincipleModal()">+ Add principle</button></div>`;
 
-  html += `  </div>
-              <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" onclick="openAddPrincipleModal()">+ Add Principle</button>
-            </div>
-
-            <!-- Column 2: Pillars -->
-            <div class="life-column pillars-column">
-              <h3>Life Pillars</h3>
-              <div class="pillars-list" id="pillarsList">`;
-
+  // Column 2: Pillars
+  html += `<div class="life-column"><h3>Life Pillars</h3><div class="pillars-list">`;
   DataStore.lifePage.pillars.forEach(pillar => {
-    const statusColor = pillar.status === 'thriving' ? '#4C6B52' : pillar.status === 'needs_attention' ? '#C97B5C' : '#7A7568';
     html += `<div class="pillar-item">
-              <div style="flex: 1;">
-                <div class="pillar-name">${escapeHtml(pillar.name)}</div>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.4rem;">
-                  <button class="btn btn-small" style="background: #4C6B52; color: white; flex: 1;" onclick="updatePillarStatus(${pillar.id}, 'thriving')" ${pillar.status === 'thriving' ? 'style="opacity: 1; background: #3d5642;"' : 'style="opacity: 0.5;"'}>Thriving</button>
-                  <button class="btn btn-small" style="background: #7A7568; color: white; flex: 1;" onclick="updatePillarStatus(${pillar.id}, 'stable')" ${pillar.status === 'stable' ? 'style="opacity: 1;"' : 'style="opacity: 0.5;"'}>Stable</button>
-                  <button class="btn btn-small" style="background: #C97B5C; color: white; flex: 1;" onclick="updatePillarStatus(${pillar.id}, 'needs_attention')" ${pillar.status === 'needs_attention' ? 'style="opacity: 1;"' : 'style="opacity: 0.5;"'}>Needs Help</button>
-                </div>
-              </div>
-              <button class="btn btn-danger btn-small" onclick="deleteLifePillar(${pillar.id})">×</button>
-            </div>`;
+               <div class="pillar-header">
+                 <span class="pillar-name">${escapeHtml(pillar.name)}</span>
+                 <button class="btn-ghost" onclick="deleteLifePillar(${pillar.id})" aria-label="Delete">×</button>
+               </div>
+               <div class="pillar-status-btns">
+                 <button class="pillar-status-btn thriving ${pillar.status === 'thriving' ? 'active' : ''}" onclick="updatePillarStatus(${pillar.id},'thriving')">Thriving</button>
+                 <button class="pillar-status-btn stable ${pillar.status === 'stable' ? 'active' : ''}" onclick="updatePillarStatus(${pillar.id},'stable')">Stable</button>
+                 <button class="pillar-status-btn needs-attention ${pillar.status === 'needs_attention' ? 'active' : ''}" onclick="updatePillarStatus(${pillar.id},'needs_attention')">Needs help</button>
+               </div>
+             </div>`;
   });
+  html += `</div><button class="btn btn-secondary" style="width:100%;margin-top:1rem;" onclick="openAddPillarModal()">+ Add pillar</button></div>`;
 
-  html += `  </div>
-              <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" onclick="openAddPillarModal()">+ Add Pillar</button>
-            </div>
+  // Column 3: Dashboard
+  html += `<div class="life-column"><h3>Now</h3><div class="dashboard-stats">`;
+  if (topStreak.count > 0) {
+    html += `<div class="dashboard-stat"><span class="dashboard-label">Top streak</span><span class="dashboard-value">${escapeHtml(topStreak.name)} · ${topStreak.count}🔥</span></div>`;
+  }
+  if (nextEvent) {
+    html += `<div class="dashboard-stat"><span class="dashboard-label">Next up</span><span class="dashboard-value">${nextEvent.time ? nextEvent.time + ' · ' : ''}${escapeHtml(nextEvent.title)}</span></div>`;
+  }
+  html += `<div class="dashboard-stat"><span class="dashboard-label">Week: habits</span><span class="dashboard-value">${weekHabitsPercent}% complete</span></div>`;
+  html += `<div class="dashboard-stat"><span class="dashboard-label">Week: meals</span><span class="dashboard-value">${weekMealsLogged}/${weekMealsTotal} logged</span></div>`;
+  html += `<div class="dashboard-stat"><span class="dashboard-label">Week: calories</span><span class="dashboard-value">${daysWithinCalorieTarget}/7 within target</span></div>`;
+  html += `</div></div>`;
 
-            <!-- Column 3: Dashboard -->
-            <div class="life-column dashboard-column">
-              <h3>Now</h3>
-              <div class="dashboard-stats">
-                ${topStreak.count > 0 ? `
-                  <div class="dashboard-stat">
-                    <span class="dashboard-label">Top Streak</span>
-                    <span class="dashboard-value">${topStreak.name} • ${topStreak.count}🔥</span>
-                  </div>
-                ` : ''}
-                ${nextEvent ? `
-                  <div class="dashboard-stat">
-                    <span class="dashboard-label">Next Event</span>
-                    <span class="dashboard-value">${nextEvent.time ? nextEvent.time + ' • ' : ''}${escapeHtml(nextEvent.title)}</span>
-                  </div>
-                ` : ''}
-                <div class="dashboard-stat">
-                  <span class="dashboard-label">Week: Habits</span>
-                  <span class="dashboard-value">${weekHabitsPercent}% complete</span>
-                </div>
-                <div class="dashboard-stat">
-                  <span class="dashboard-label">Week: Meals</span>
-                  <span class="dashboard-value">${weekMealsLogged}/${weekMealsTotal} logged</span>
-                </div>
-                <div class="dashboard-stat">
-                  <span class="dashboard-label">Week: Calories</span>
-                  <span class="dashboard-value">${daysWithinCalorieTarget}/7 within target</span>
-                </div>
-              </div>
-            </div>
-          </div>`;
-
+  html += '</div>';
   container.innerHTML = html;
 }
 
 function openAddPrincipleModal() {
   currentMode = 'addPrinciple';
   currentEditId = null;
+  document.getElementById('modalTitle').textContent = 'Add a principle';
   document.getElementById('formFields').innerHTML = `
     <div class="form-group">
-      <label for="principleText">Principle</label>
-      <input type="text" id="principleText" placeholder="e.g. Move daily" maxlength="100" required>
+      <label for="principleText">Your guiding principle</label>
+      <input type="text" id="principleText" placeholder="e.g. Move daily, Be kind to yourself" maxlength="100" required>
     </div>
   `;
   openModal();
   setTimeout(() => document.getElementById('principleText').focus(), 100);
 }
 
-function deletePrinciple(id) {
-  DataStore.deletePrinciple(id);
-  renderLifePage();
+async function deletePrinciple(id) {
+  const confirmed = await ConfirmDialog.open('Remove this principle?', '');
+  if (confirmed) { DataStore.deletePrinciple(id); renderLifePage(); }
 }
 
 function openAddPillarModal() {
   currentMode = 'addPillar';
   currentEditId = null;
+  document.getElementById('modalTitle').textContent = 'Add a life pillar';
   document.getElementById('formFields').innerHTML = `
     <div class="form-group">
-      <label for="pillarName">Life Pillar</label>
-      <input type="text" id="pillarName" placeholder="e.g. Health, Career" maxlength="50" required>
+      <label for="pillarName">Pillar name</label>
+      <input type="text" id="pillarName" placeholder="e.g. Health, Career, Relationships" maxlength="50" required>
     </div>
   `;
   openModal();
@@ -1357,9 +1318,17 @@ function updatePillarStatus(id, status) {
   renderLifePage();
 }
 
-function deleteLifePillar(id) {
-  DataStore.deleteLifePillar(id);
-  renderLifePage();
+async function deleteLifePillar(id) {
+  const confirmed = await ConfirmDialog.open('Remove this pillar?', '');
+  if (confirmed) { DataStore.deleteLifePillar(id); renderLifePage(); }
+}
+
+// ========== Settings ==========
+function renderSettings() {
+  const bmrInput = document.getElementById('bmrInput');
+  const activityInput = document.getElementById('activityInput');
+  if (bmrInput) bmrInput.value = DataStore.calorieConfig.bmr || 1800;
+  if (activityInput) activityInput.value = DataStore.calorieConfig.activityMultiplier || 1.2;
 }
 
 // ========== Modal ==========
@@ -1376,90 +1345,93 @@ function closeModal() {
 function handleFormSubmit(e) {
   e.preventDefault();
 
-  if (currentMode === 'addSchedule') {
-    const title = document.getElementById('scheduleTitle').value;
-    const time = document.getElementById('scheduleTime').value;
-    DataStore.addScheduleItem(title, time);
-    renderTimeline();
-  } else if (currentMode === 'editSchedule') {
-    const title = document.getElementById('scheduleTitle').value;
-    const time = document.getElementById('scheduleTime').value;
-    DataStore.updateScheduleItem(currentEditId, title, time);
-    renderTimeline();
-  } else if (currentMode === 'addInterval') {
-    const label = document.getElementById('intervalLabel').value;
-    const start = document.getElementById('intervalStart').value;
-    const end = document.getElementById('intervalEnd').value;
-    const today = DataStore.getTodayKey();
-    DataStore.addDayInterval(today, start, end, label);
-    renderMicroSchedule();
-  } else if (currentMode === 'editInterval') {
-    const label = document.getElementById('intervalLabel').value;
-    const start = document.getElementById('intervalStart').value;
-    const end = document.getElementById('intervalEnd').value;
-    const today = DataStore.getTodayKey();
-    DataStore.updateDayInterval(today, currentEditId, start, end, label);
-    renderMicroSchedule();
-  } else if (currentMode === 'addHabit') {
-    const type = document.getElementById('habitType').value;
-    const name = document.getElementById('habitName').value;
-    const time = document.getElementById('habitTime').value;
-    if (type === 'med') {
-      DataStore.addMed(name, time);
-    } else {
-      DataStore.addHabit(name);
+  switch (currentMode) {
+    case 'addInterval': {
+      const label = document.getElementById('intervalLabel').value.trim();
+      const start = document.getElementById('intervalStart').value;
+      const end = document.getElementById('intervalEnd').value;
+      if (label && start && end) {
+        DataStore.addDayInterval(DataStore.getTodayKey(), start, end, label);
+        renderMicroSchedule();
+      }
+      break;
     }
-    renderHabits();
-    renderHeatmap();
-  } else if (currentMode === 'editHabit') {
-    const type = document.getElementById('habitType').value;
-    const name = document.getElementById('habitName').value;
-    const time = document.getElementById('habitTime').value;
-    // Delete old, add new
-    const items = DataStore.habits.concat(DataStore.meds);
-    const oldItem = items.find(i => i.id === currentEditId);
-    if (oldItem.type === 'med') {
-      DataStore.deleteMed(currentEditId);
-    } else {
-      DataStore.deleteHabit(currentEditId);
+    case 'editInterval': {
+      const label = document.getElementById('intervalLabel').value.trim();
+      const start = document.getElementById('intervalStart').value;
+      const end = document.getElementById('intervalEnd').value;
+      if (label && start && end) {
+        DataStore.updateDayInterval(DataStore.getTodayKey(), currentEditId, start, end, label);
+        renderMicroSchedule();
+      }
+      break;
     }
-    if (type === 'med') {
-      DataStore.addMed(name, time);
-    } else {
-      DataStore.addHabit(name);
+    case 'addHabit': {
+      const type = document.getElementById('habitType').value;
+      const name = document.getElementById('habitName').value.trim();
+      const time = document.getElementById('habitTime').value;
+      if (name) {
+        if (type === 'med') DataStore.addMed(name, time);
+        else DataStore.addHabit(name);
+        renderHabits();
+        renderHeatmap();
+      }
+      break;
     }
-    renderHabits();
-    renderHeatmap();
-  } else if (currentMode === 'addEvent') {
-    const title = document.getElementById('eventTitle').value;
-    const date = document.getElementById('eventDate').value;
-    const time = document.getElementById('eventTime').value;
-    DataStore.addEvent(title, date, time);
-    renderUpcoming();
-  } else if (currentMode === 'editEvent') {
-    const title = document.getElementById('eventTitle').value;
-    const date = document.getElementById('eventDate').value;
-    const time = document.getElementById('eventTime').value;
-    DataStore.updateEvent(currentEditId, title, date, time);
-    renderUpcoming();
-  } else if (currentMode === 'addPrinciple') {
-    const text = document.getElementById('principleText').value.trim();
-    if (text) {
-      DataStore.addPrinciple(text);
-      renderLifePage();
+    case 'editHabit': {
+      const type = document.getElementById('habitType').value;
+      const name = document.getElementById('habitName').value.trim();
+      const time = document.getElementById('habitTime').value;
+      if (name) {
+        const oldItems = DataStore.habits.concat(DataStore.meds);
+        const oldItem = oldItems.find(i => i.id === currentEditId);
+        if (oldItem) {
+          if (oldItem.type === 'med') DataStore.deleteMed(currentEditId);
+          else DataStore.deleteHabit(currentEditId);
+        }
+        if (type === 'med') DataStore.addMed(name, time);
+        else DataStore.addHabit(name);
+        renderHabits();
+        renderHeatmap();
+      }
+      break;
     }
-  } else if (currentMode === 'addPillar') {
-    const name = document.getElementById('pillarName').value.trim();
-    if (name) {
-      DataStore.addLifePillar(name);
-      renderLifePage();
+    case 'addEvent': {
+      const title = document.getElementById('eventTitle').value.trim();
+      const date = document.getElementById('eventDate').value;
+      const time = document.getElementById('eventTime').value;
+      if (title && date) {
+        DataStore.addEvent(title, date, time);
+        renderUpcoming();
+      }
+      break;
+    }
+    case 'editEvent': {
+      const title = document.getElementById('eventTitle').value.trim();
+      const date = document.getElementById('eventDate').value;
+      const time = document.getElementById('eventTime').value;
+      if (title && date) {
+        DataStore.updateEvent(currentEditId, title, date, time);
+        renderUpcoming();
+      }
+      break;
+    }
+    case 'addPrinciple': {
+      const text = document.getElementById('principleText').value.trim();
+      if (text) { DataStore.addPrinciple(text); renderLifePage(); }
+      break;
+    }
+    case 'addPillar': {
+      const name = document.getElementById('pillarName').value.trim();
+      if (name) { DataStore.addLifePillar(name); renderLifePage(); }
+      break;
     }
   }
 
   closeModal();
 }
 
-// ========== Settings / Export Import ==========
+// ========== Export / Import ==========
 function exportData() {
   const data = DataStore.exportData();
   const json = JSON.stringify(data, null, 2);
@@ -1467,7 +1439,7 @@ function exportData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `lifeos-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.download = `lifeos-archive-${new Date().toISOString().split('T')[0]}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -1475,21 +1447,17 @@ function exportData() {
 function importData(e) {
   const file = e.target.files[0];
   if (!file) return;
-
   const reader = new FileReader();
   reader.onload = (event) => {
     try {
       const data = JSON.parse(event.target.result);
       DataStore.importData(data);
-      alert('Data imported successfully!');
       renderSection(currentSection);
     } catch (err) {
-      alert('Error importing data. Please check the file format.');
+      alert('Couldn\'t read that file. Please check the format.');
     }
   };
   reader.readAsText(file);
-
-  // Reset input
   document.getElementById('importFile').value = '';
 }
 
@@ -1497,13 +1465,18 @@ function saveCalorieConfig() {
   const bmr = parseInt(document.getElementById('bmrInput').value) || 1800;
   const activityMultiplier = parseFloat(document.getElementById('activityInput').value) || 1.2;
   DataStore.setCalorieConfig(bmr, activityMultiplier);
-  alert('Calorie settings saved!');
+  const btn = document.getElementById('saveCalorieConfigBtn');
+  const originalText = btn.textContent;
+  btn.textContent = 'Saved ✓';
+  setTimeout(() => { btn.textContent = originalText; }, 2000);
 }
 
 // ========== Keyboard Shortcuts ==========
 function handleKeyboardShortcuts(e) {
-  // Don't trigger on form inputs
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+  const tag = e.target.tagName;
+  const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+
+  if (isInput) {
     if (e.key === 'Escape') closeModal();
     return;
   }
@@ -1511,23 +1484,23 @@ function handleKeyboardShortcuts(e) {
   if (e.ctrlKey && e.key === 'k') {
     e.preventDefault();
     openQuickCapture();
-  } else if (e.key.toLowerCase() === 'n') {
-    if (currentSection === 'today') openAddIntervalModal(formatTime(new Date()));
-    else if (currentSection === 'habits') openAddHabitModal();
-    else if (currentSection === 'food') openAddMealModal();
-    else if (currentSection === 'upcoming') openAddEventModal();
-  } else if (e.key.toLowerCase() === 't') {
-    renderSection('today');
-  } else if (e.key.toLowerCase() === 'h') {
-    renderSection('habits');
-  } else if (e.key.toLowerCase() === 'f') {
-    renderSection('food');
-  } else if (e.key.toLowerCase() === 'u') {
-    renderSection('upcoming');
-  } else if (e.key.toLowerCase() === 'c') {
-    renderSection('calendar');
-  } else if (e.key.toLowerCase() === 'l') {
-    renderSection('life');
+    return;
+  }
+
+  switch (e.key.toLowerCase()) {
+    case 'n':
+      if (currentSection === 'today') openAddIntervalModal(formatTime(new Date()));
+      else if (currentSection === 'habits') openAddHabitModal();
+      else if (currentSection === 'upcoming') openAddEventModal();
+      break;
+    case 't': renderSection('today'); break;
+    case 'h': renderSection('habits'); break;
+    case 'f': renderSection('food'); break;
+    case 'u': renderSection('upcoming'); break;
+    case 'c': renderSection('calendar'); break;
+    case 'l': renderSection('life'); break;
+    case 'w': renderSection('week'); break;
+    case 's': renderSection('settings'); break;
   }
 }
 
@@ -1541,26 +1514,14 @@ function closeQuickCapture() {
   document.getElementById('quickCapture').classList.remove('active');
 }
 
-function openAddMealModal() {
-  currentMode = 'addMeal';
-  currentEditId = null;
-  document.getElementById('formFields').innerHTML = `
-    <p style="color: #7A7568; margin-bottom: 1rem;">Add meal items directly in the Food section for faster entry.</p>
-  `;
-  closeModal();
-  renderSection('food');
-}
-
 // ========== Utilities ==========
 function timeToMinutes(timeStr) {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return hours * 60 + minutes;
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
 }
 
 function formatTime(date) {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function escapeHtml(text) {
@@ -1568,18 +1529,3 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
-
-// Close modal on backdrop click
-document.getElementById('modal').addEventListener('click', (e) => {
-  if (e.target.id === 'modal') {
-    closeModal();
-  }
-});
-
-// Close quick capture on backdrop click
-document.addEventListener('click', (e) => {
-  const qc = document.getElementById('quickCapture');
-  if (qc.classList.contains('active') && !qc.contains(e.target)) {
-    closeQuickCapture();
-  }
-});

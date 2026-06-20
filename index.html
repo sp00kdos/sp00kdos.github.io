@@ -1,93 +1,158 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="parchment">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LifeOS — Personal Planner</title>
+  <title>LifeOS — Your Day, Designed</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Top Navigation -->
-  <nav class="top-nav">
+  <!-- Ambient background blobs -->
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-blob blob-1"></div>
+    <div class="ambient-blob blob-2"></div>
+    <div class="ambient-blob blob-3"></div>
+  </div>
+
+  <!-- Top Navigation (desktop) -->
+  <nav class="top-nav" role="navigation" aria-label="Main navigation">
     <div class="nav-container">
-      <h1 class="logo">LifeOS</h1>
+      <div class="logo-area">
+        <span class="logo-mark"></span>
+        <h1 class="logo">LifeOS</h1>
+      </div>
       <div class="nav-links">
-        <button class="nav-link active" data-section="today" aria-label="Go to Today">Today</button>
-        <button class="nav-link" data-section="habits" aria-label="Go to Habits & Meds">Habits</button>
-        <button class="nav-link" data-section="food" aria-label="Go to Food Plan">Food</button>
-        <button class="nav-link" data-section="upcoming" aria-label="Go to Upcoming">Upcoming</button>
-        <button class="nav-link" data-section="calendar" aria-label="Go to Calendar">Calendar</button>
-        <button class="nav-link" data-section="life" aria-label="Go to Life">Life</button>
-        <button class="nav-link" data-section="week" aria-label="Go to Week Overview">Week</button>
-        <button class="nav-link" data-section="settings" aria-label="Go to Settings">Settings</button>
+        <button class="nav-link active" data-section="today" aria-label="Go to Today">
+          <span class="nav-link-text">Today</span>
+        </button>
+        <button class="nav-link" data-section="habits" aria-label="Go to Habits & Meds">
+          <span class="nav-link-text">Habits</span>
+        </button>
+        <button class="nav-link" data-section="food" aria-label="Go to Food Plan">
+          <span class="nav-link-text">Food</span>
+        </button>
+        <button class="nav-link" data-section="upcoming" aria-label="Go to Upcoming">
+          <span class="nav-link-text">Upcoming</span>
+        </button>
+        <button class="nav-link" data-section="calendar" aria-label="Go to Calendar">
+          <span class="nav-link-text">Calendar</span>
+        </button>
+        <button class="nav-link" data-section="life" aria-label="Go to Life">
+          <span class="nav-link-text">Life</span>
+        </button>
+        <button class="nav-link" data-section="week" aria-label="Go to Week Overview">
+          <span class="nav-link-text">Week</span>
+        </button>
+        <button class="nav-link" data-section="settings" aria-label="Go to Settings">
+          <span class="nav-link-text">Settings</span>
+        </button>
       </div>
     </div>
   </nav>
 
+  <!-- Bottom Navigation (mobile) -->
+  <nav class="bottom-nav" role="navigation" aria-label="Mobile navigation">
+    <button class="bottom-nav-link active" data-section="today" aria-label="Today">
+      <svg class="bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Today</span>
+    </button>
+    <button class="bottom-nav-link" data-section="habits" aria-label="Habits">
+      <svg class="bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <span>Habits</span>
+    </button>
+    <button class="bottom-nav-link" data-section="food" aria-label="Food">
+      <svg class="bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+      <span>Food</span>
+    </button>
+    <button class="bottom-nav-link" data-section="upcoming" aria-label="Upcoming">
+      <svg class="bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Events</span>
+    </button>
+    <button class="bottom-nav-link" data-section="life" aria-label="Life">
+      <svg class="bottom-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span>Life</span>
+    </button>
+  </nav>
+
   <main class="main-content">
-    <!-- Today Section -->
+    <!-- ==================== TODAY ==================== -->
     <section id="today" class="section active">
-      <div class="section-header">
-        <div>
-          <p class="greeting" id="greeting">Good morning</p>
-          <h2 class="section-title">Today</h2>
-          <p class="date-display" id="dateDisplay"></p>
-        </div>
-        <button class="btn btn-primary" id="addTodayBtn" aria-label="Add item to today">+ Add to today</button>
+      <div class="today-hero">
+        <p class="greeting" id="greeting">Good morning</p>
+        <h2 class="today-title">Today</h2>
+        <p class="date-display" id="dateDisplay"></p>
       </div>
 
-      <div class="timeline" id="timeline">
-        <!-- Timeline items render here -->
+      <!-- Now / Next indicator -->
+      <div class="now-indicator" id="nowIndicator" style="display:none;">
+        <span class="now-dot"></span>
+        <span class="now-label">Now</span>
+        <span class="now-text" id="nowText"></span>
+      </div>
+
+      <!-- Micro-schedule timeline -->
+      <div class="timeline-wrapper">
+        <div class="timeline-header-row">
+          <h3 class="timeline-heading">Schedule</h3>
+          <button class="btn btn-primary btn-small" id="addTodayBtn" aria-label="Add item to today">+ Add to today</button>
+        </div>
+        <div class="micro-schedule" id="timeline">
+          <!-- Timeline renders here -->
+        </div>
       </div>
     </section>
 
-    <!-- Habits & Meds Section -->
+    <!-- ==================== HABITS & MEDS ==================== -->
     <section id="habits" class="section">
       <div class="section-header">
         <div>
           <h2 class="section-title">Habits & Meds</h2>
-          <p class="section-subtitle">Track daily routines and medications</p>
+          <p class="section-subtitle">Small things, done consistently</p>
         </div>
         <button class="btn btn-primary" id="addHabitBtn" aria-label="Add habit or medication">+ Add</button>
       </div>
 
-      <div class="habits-container">
+      <div class="habits-layout">
         <div id="habitsList" class="habits-list">
           <!-- Habits render here -->
         </div>
-        <div class="heatmap-container">
-          <h3 class="heatmap-title">Completion history</h3>
+        <aside class="heatmap-panel">
+          <h3 class="heatmap-title">Last 30 days</h3>
           <div id="heatmapStrip" class="heatmap-strip">
             <!-- Heatmap renders here -->
           </div>
-        </div>
+          <p class="heatmap-legend">
+            <span class="legend-dot done"></span> Complete
+            <span class="legend-dot partial"></span> Partial
+            <span class="legend-dot"></span> Missed
+          </p>
+        </aside>
       </div>
     </section>
 
-    <!-- Food Plan Section -->
+    <!-- ==================== FOOD PLAN ==================== -->
     <section id="food" class="section">
       <div class="section-header">
         <div>
           <h2 class="section-title">Food Plan</h2>
-          <p class="section-subtitle">Today's meals</p>
+          <p class="section-subtitle">Nourish yourself today</p>
         </div>
-        <button class="btn btn-primary" id="addMealBtn" aria-label="Add meal">+ Add meal</button>
       </div>
 
-      <div class="meals-container" id="mealsContainer">
+      <div class="meals-grid" id="mealsContainer">
         <!-- Meals render here -->
       </div>
     </section>
 
-    <!-- Upcoming Section -->
+    <!-- ==================== UPCOMING ==================== -->
     <section id="upcoming" class="section">
       <div class="section-header">
         <div>
           <h2 class="section-title">Upcoming</h2>
-          <p class="section-subtitle">Events and activities ahead</p>
+          <p class="section-subtitle">What's on the horizon</p>
         </div>
         <button class="btn btn-primary" id="addEventBtn" aria-label="Add event">+ Add event</button>
       </div>
@@ -97,95 +162,122 @@
       </div>
     </section>
 
-    <!-- Calendar Section -->
+    <!-- ==================== CALENDAR ==================== -->
     <section id="calendar" class="section">
       <div class="section-header">
         <h2 class="section-title">Calendar</h2>
       </div>
-      <div id="calendarGrid" class="calendar-container">
+      <div id="calendarGrid" class="calendar-wrapper">
         <!-- Calendar renders here -->
       </div>
     </section>
 
-    <!-- Life Section -->
+    <!-- ==================== LIFE ==================== -->
     <section id="life" class="section">
       <div class="section-header">
-        <h2 class="section-title">Life</h2>
-        <p class="section-subtitle">Your north stars, pillars, and now</p>
+        <div>
+          <h2 class="section-title">Life</h2>
+          <p class="section-subtitle">Your north stars, pillars, and now</p>
+        </div>
       </div>
-      <div class="life-container" id="lifeContainer">
+      <div class="life-grid" id="lifeContainer">
         <!-- Three columns render here -->
       </div>
     </section>
 
-    <!-- Week Overview Section -->
+    <!-- ==================== WEEK OVERVIEW ==================== -->
     <section id="week" class="section">
       <div class="section-header">
-        <h2 class="section-title">Week Overview</h2>
+        <h2 class="section-title">This Week</h2>
       </div>
-
-      <div id="weekOverview" class="week-overview">
+      <div id="weekOverview" class="week-grid">
         <!-- Week overview renders here -->
       </div>
     </section>
 
-    <!-- Settings Section -->
+    <!-- ==================== SETTINGS ==================== -->
     <section id="settings" class="section">
       <div class="section-header">
         <h2 class="section-title">Settings</h2>
       </div>
 
-      <div class="settings-content">
-        <div class="settings-section">
+      <div class="settings-layout">
+        <div class="settings-group">
+          <h3>Appearance</h3>
+          <div class="theme-switcher" id="themeSwitcher">
+            <button class="theme-btn active" data-theme="parchment" aria-label="Parchment theme">
+              <span class="theme-preview parchment-preview"></span>
+              Parchment
+            </button>
+            <button class="theme-btn" data-theme="forest" aria-label="Forest theme">
+              <span class="theme-preview forest-preview"></span>
+              Forest
+            </button>
+            <button class="theme-btn" data-theme="ocean" aria-label="Ocean theme">
+              <span class="theme-preview ocean-preview"></span>
+              Ocean
+            </button>
+            <button class="theme-btn" data-theme="library" aria-label="Library theme">
+              <span class="theme-preview library-preview"></span>
+              Library
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-group">
           <h3>Calorie Tracking</h3>
-          <div class="settings-inputs">
+          <div class="settings-fields">
             <div class="form-group">
               <label for="bmrInput">Basal Metabolic Rate (BMR)</label>
               <input type="number" id="bmrInput" min="1000" max="3000" placeholder="e.g. 1800" value="1800">
             </div>
             <div class="form-group">
               <label for="activityInput">Activity Level</label>
-              <select id="activityInput" style="padding: 0.75rem 1rem; border: 1px solid #E4E0D4; border-radius: 12px; font-family: 'Figtree', sans-serif; font-size: 0.95rem; background-color: #FDFCF8;">
-                <option value="1.2">Sedentary (1.2x)</option>
-                <option value="1.4" selected>Light Activity (1.4x)</option>
-                <option value="1.55">Moderate Activity (1.55x)</option>
-                <option value="1.75">Very Active (1.75x)</option>
+              <select id="activityInput">
+                <option value="1.2">Sedentary (1.2×)</option>
+                <option value="1.4" selected>Light Activity (1.4×)</option>
+                <option value="1.55">Moderate Activity (1.55×)</option>
+                <option value="1.75">Very Active (1.75×)</option>
               </select>
             </div>
-            <button class="btn btn-secondary" id="saveCalorieConfigBtn">Save</button>
+            <button class="btn btn-secondary" id="saveCalorieConfigBtn">Save calorie settings</button>
           </div>
         </div>
-        <div class="settings-section">
-          <h3>Data Management</h3>
-          <button class="btn btn-secondary" id="exportBtn">Download My Archive</button>
-          <button class="btn btn-secondary" id="importBtn">Import Archive</button>
-          <input type="file" id="importFile" accept=".json" style="display:none;">
+
+        <div class="settings-group">
+          <h3>Your Data</h3>
+          <p class="settings-note">Everything lives in your browser. Download a backup anytime.</p>
+          <div class="settings-actions">
+            <button class="btn btn-secondary" id="exportBtn">↓ Download My Archive</button>
+            <button class="btn btn-secondary" id="importBtn">↑ Import Archive</button>
+            <input type="file" id="importFile" accept=".json" style="display:none;">
+          </div>
         </div>
-        <div class="settings-section">
+
+        <div class="settings-group">
           <h3>Keyboard Shortcuts</h3>
           <ul class="shortcuts-list">
-            <li><kbd>N</kbd> — New item</li>
-            <li><kbd>T</kbd> — Today</li>
-            <li><kbd>H</kbd> — Habits</li>
-            <li><kbd>F</kbd> — Food</li>
-            <li><kbd>U</kbd> — Upcoming</li>
-            <li><kbd>C</kbd> — Calendar</li>
-            <li><kbd>L</kbd> — Life</li>
-            <li><kbd>Ctrl+K</kbd> — Quick capture</li>
+            <li><kbd>N</kbd><span>New item for current view</span></li>
+            <li><kbd>T</kbd><span>Go to Today</span></li>
+            <li><kbd>H</kbd><span>Go to Habits</span></li>
+            <li><kbd>F</kbd><span>Go to Food</span></li>
+            <li><kbd>U</kbd><span>Go to Upcoming</span></li>
+            <li><kbd>C</kbd><span>Go to Calendar</span></li>
+            <li><kbd>L</kbd><span>Go to Life</span></li>
+            <li><kbd>Ctrl+K</kbd><span>Quick capture</span></li>
           </ul>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- Modal for adding/editing items -->
-  <div id="modal" class="modal">
+  <!-- ==================== MODAL ==================== -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-content">
-      <button class="modal-close" id="closeModal" aria-label="Close modal">&times;</button>
+      <h3 id="modalTitle" class="modal-title">Add something</h3>
+      <button class="modal-close" id="closeModal" aria-label="Close">&times;</button>
       <form id="itemForm">
-        <div id="formFields">
-          <!-- Fields render based on item type -->
-        </div>
+        <div id="formFields"></div>
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">Save</button>
           <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
@@ -194,10 +286,24 @@
     </div>
   </div>
 
-  <!-- Quick capture (Ctrl+K) -->
-  <div id="quickCapture" class="quick-capture">
-    <input type="text" id="quickCaptureInput" placeholder="What's on your mind?" maxlength="200">
-    <p class="quick-capture-hint">Press Enter to add • Esc to close</p>
+  <!-- ==================== CUSTOM CONFIRM DIALOG ==================== -->
+  <div id="confirmDialog" class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="confirm-content">
+      <h3 id="confirmTitle" class="confirm-title">Are you sure?</h3>
+      <p id="confirmMessage" class="confirm-message"></p>
+      <div class="confirm-actions">
+        <button class="btn btn-danger" id="confirmYes">Remove</button>
+        <button class="btn btn-secondary" id="confirmNo">Keep it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== QUICK CAPTURE ==================== -->
+  <div id="quickCapture" class="quick-capture" role="dialog" aria-modal="true" aria-label="Quick capture">
+    <div class="quick-capture-inner">
+      <input type="text" id="quickCaptureInput" placeholder="What's on your mind?" maxlength="200" aria-label="Quick capture input">
+      <p class="quick-capture-hint">Press Enter to add · Esc to close</p>
+    </div>
   </div>
 
   <script src="app.js"></script>
